@@ -1,0 +1,352 @@
+---
+title: "Assg_1"
+author: "Sonali Kalthur"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+##Load required library packages
+```{r packages}
+library(cluster)
+library(ggplot2)
+library(ggfortify)
+library(caret)
+library(factoextra)
+```
+
+##Reading the survey data
+```{r}
+setwd("~/Documents/Semester2/Computationalstatistics/tutorial/Survey_data")
+survey_list <- read.csv("survey_final_clean_transposed_v1.1.csv", header = T, na.strings=c(""," ","NA", "-"))
+
+# Column Names changed to abbreviated form
+names(survey_list) <- c("ID", "professional_experience", "job_satisfaction", "professional_background", "stats_experience", "programming_experience", "amount_entertainment", "amount_study", "enough_effort", "amount_funreading", "country_born", "month_born", "income", "statisticians_lie", "visualisation_factors", "visualisation_vs_datacleaning", "UOS_satisfaction", "salary_wish", "favourite_colour", "street_number", "highschool_satisfaction", "eye_colour", "pokemons_caught", "work_experience", "undergrad_major", "current_degree", "stats_level", "statistician", "professional_parents", "height", "age", "target_industry", "countries_visited", "countries_livedin", "parental_language", "expected_grade", "favourite_movie", "like_chocolate", "tennis_vs_rugby", "STAT5002_guess", "R_guess", "IT_guess", "maths_guess", "trump_threat", "earliest_memory", "countries_totravel", "target_industry2", "home_value", "home_satisfaction", "mostfamiliar_programming", "age_independent", "favourite_number")
+```
+
+##Analyzing the times spent in a week by participants to experience level of statistics
+```{r}
+##Outlier treatment for How many days do you spend on entertainment each week?
+for(i in seq(survey_list$amount_entertainment)) { 
+  if(survey_list$amount_entertainment[i] > 7) { 
+    survey_list$amount_entertainment[i] = 7
+  }}
+
+##Converting the hours in the column 9 to days
+for(i in seq(survey_list$amount_funreading)) {
+    survey_list$amount_funreading[i] = survey_list$amount_funreading[i]/24
+  }
+
+
+##Creating a subset and replacing na with 0
+subset_2<- survey_list[,c('amount_entertainment','amount_study','amount_funreading')]
+subset_2[is.na(subset_2)]<- 0
+
+##Checking for optimal K value
+Koptimal_val <- (length(subset_2)-1)*sum(apply(subset_2,2,var))
+for (i in 1:20) Koptimal_val[i] <- sum(kmeans(subset_2,centers=i)$withinss)
+plot(1:20, Koptimal_val, type="b", xlab="Number of Clusters",
+  ylab="Dataset Value")
+
+##applying Kmeans Clustering on the data
+subset_cluster<- kmeans(subset_2,4,nstart=1)
+table(subset_cluster$cluster,survey_list$expected_grade) 
+
+##Plotting the Cluster
+#install.packages('ggfortify')
+#library(ggfortify)
+autoplot(subset_cluster,data=subset_2)
+
+##Validating the cluster using silhoutte width 
+sil <- silhouette(subset_cluster$cluster, dist(subset_2))
+head(sil[, 1:3], 10)
+plot(sil, main ="Silhouette plot - K-means")
+fviz_silhouette(sil)
+
+# Summary of silhouette analysis
+sil.summary <- summary(sil)
+# Average silhouette width of each cluster
+sil.summary$clus.avg.widths
+# The total average (mean of all individual silhouette widths)
+sil.summary$avg.width
+# The size of each clusters
+sil.summary$clus.sizes
+```
+
+
+## Clustering people with similar experience(background) to check thier salary exceptation
+```{r}
+#Creating subset
+subset_3<- survey_list[,c('stats_experience','programming_experience','professional_experience')]
+
+##Treating missing values for Income and replacing stats_experience 0 with NaN
+
+#subset_3$income[subset_3$income==0]<-NaN
+subset_3$stats_experience[is.na(subset_3$stats_experience) ] <- 0
+#subset_3$income <- with(subset_3,ave(subset_3$income,subset_3$professional_experience,FUN = function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))))
+#subset_3$income[is.nan(subset_3$income)] <- 0
+
+##Doing a scale
+max_val <-apply(subset_3,2,max)
+min_val <-apply(subset_3,2,min)
+subset_3_scale<- scale(subset_3, center=min_val, scale = max_val-min_val)
+```
+
+##Kmeans Clustering
+```{r}
+subset_cluster1<- kmeans(subset_3_scale,5,nstart=1)
+subset_cluster1$cluster
+#plot(subset_3_scale,col=subset_cluster1$cluster)
+#points(subset_cluster1$centers, pch=16)
+autoplot(subset_cluster1,data=subset_3_scale)
+table(subset_cluster1$cluster,survey_list$salary_wish) 
+
+##Checking for optimal K value
+Koptimal_val <- (length(subset_3)-1)*sum(apply(subset_3,2,var))
+for (i in 1:20) Koptimal_val[i] <- sum(kmeans(subset_3,centers=i)$withinss)
+plot(1:20, Koptimal_val, type="b", xlab="Number of Clusters",
+  ylab="Dataset Value")
+
+##Validating the cluster using silhoutte width (the one clustered has no group because its a blank)
+sil <- silhouette(subset_cluster1$cluster, dist(subset_3_scale))
+head(sil[, 1:3], 10)
+plot(sil, main ="Silhouette plot - K-means")
+fviz_silhouette(sil)
+
+# Summary of silhouette analysis
+sil.summary <- summary(sil)
+# Average silhouette width of each cluster
+sil.summary$clus.avg.widths
+# The total average (mean of all individual silhouette widths)
+sil.summary$avg.width
+# The size of each clusters
+sil.summary$clus.sizes
+```
+
+
+##People with different professional backgrounds are skilled in both programming and statistics
+
+## Clustering people with similar experience(background) to check thier salary exceptation
+```{r}
+#Creating subset
+subset_4<- survey_list[,c('stats_experience','programming_experience','professional_experience')]
+
+
+##replacing stats_experience 0 with NaN
+subset_4$stats_experience[is.na(subset_4$stats_experience) ] <- 0
+
+##Converting total number of professional years year to days
+subset_4$professional_experience<- subset_4$professional_experience*365 
+
+##Doing a scale
+#max_val <-apply(subset_3,2,max)
+#min_val <-apply(subset_3,2,min)
+#subset_3_scale<- scale(subset_3, center=min_val, scale = max_val-min_val)
+```
+
+##Kmeans Clustering
+```{r}
+subset_cluster2<- kmeans(subset_4,5,nstart=1)
+subset_cluster2$cluster
+#plot(subset_3_scale,col=subset_cluster1$cluster)
+#points(subset_cluster1$centers, pch=16)
+autoplot(subset_cluster2,data=subset_4)
+table(subset_cluster2$cluster,survey_list$professional_background) 
+
+##Checking for optimal K value
+Koptimal_val <- (length(subset_4)-1)*sum(apply(subset_4,2,var))
+for (i in 1:20) Koptimal_val[i] <- sum(kmeans(subset_4,centers=i)$withinss)
+plot(1:20, Koptimal_val, type="b", xlab="Number of Clusters",
+  ylab="Dataset Value")
+
+##Validating the cluster using silhoutte width (the one clustered has no group because its a blank)
+sil <- silhouette(subset_cluster2$cluster, dist(subset_4))
+head(sil[, 1:3], 10)
+plot(sil, main ="Silhouette plot - K-means")
+fviz_silhouette(sil)
+
+# Summary of silhouette analysis
+sil.summary <- summary(sil)
+# Average silhouette width of each cluster
+sil.summary$clus.avg.widths
+# The total average (mean of all individual silhouette widths)
+sil.summary$avg.width
+# The size of each clusters
+sil.summary$clus.sizes
+```
+
+##People with high salary are they satisfied with their current place of living?
+
+
+## Clustering people with similar experience(background) to check thier salary exceptation
+```{r}
+#Creating subset
+subset_4<- survey_list[,c('programming_experience','professional_experience','job_satisfaction')]
+
+##replacing stats_experience 0 with NaN
+subset_4$stats_experience[is.na(subset_4$stats_experience) ] <- 0
+
+
+##Doing a scale
+#max_val <-apply(subset_3,2,max)
+#min_val <-apply(subset_3,2,min)
+#subset_3_scale<- scale(subset_3, center=min_val, scale = max_val-min_val)
+```
+
+##Kmeans Clustering
+```{r}
+subset_cluster2<- kmeans(subset_4,4,nstart=1)
+subset_cluster2$cluster
+#plot(subset_3_scale,col=subset_cluster1$cluster)
+#points(subset_cluster1$centers, pch=16)
+autoplot(subset_cluster2,data=subset_4)
+table(subset_cluster2$cluster,survey_list$professional_background)
+
+
+##Checking for optimal K value
+Koptimal_val <- (length(subset_4)-1)*sum(apply(subset_4,2,var))
+for (i in 1:20) Koptimal_val[i] <- sum(kmeans(subset_4,centers=i)$withinss)
+plot(1:20, Koptimal_val, type="b", xlab="Number of Clusters",
+  ylab="Dataset Value")
+
+##Validating the cluster using silhoutte width (the one clustered has no group because its a blank)
+sil <- silhouette(subset_cluster2$cluster, dist(subset_4))
+head(sil[, 1:3], 10)
+plot(sil, main ="Silhouette plot - K-means")
+fviz_silhouette(sil)
+
+# Summary of silhouette analysis
+sil.summary <- summary(sil)
+# Average silhouette width of each cluster
+sil.summary$clus.avg.widths
+# The total average (mean of all individual silhouette widths)
+sil.summary$avg.width
+# The size of each clusters
+sil.summary$clus.sizes
+```
+
+
+##Clustering all the rating scale value to check how it differs from each country of origin
+```{r}
+#Creating subset
+subset_5<- survey_list[,c('job_satisfaction','UOS_satisfaction','highschool_satisfaction','home_satisfaction')]
+
+##replacing stats_experience 0 with NaN
+subset_5$job_satisfaction[is.na(subset_5$job_satisfaction) ] <- 0
+subset_5$UOS_satisfaction[is.na(subset_5$UOS_satisfaction) ] <- 0
+subset_5$highschool_satisfaction[is.na(subset_5$highschool_satisfaction) ] <- 0
+#subset_5$trump_threat[is.na(subset_5$trump_threat) ] <- 0
+subset_5$home_satisfaction[is.na(subset_5$home_satisfaction) ] <- 0
+
+
+
+
+##Doing a scale
+max_val <-apply(subset_5,2,max)
+min_val <-apply(subset_5,2,min)
+subset_3_scale<- scale(subset_5, center=min_val, scale = max_val-min_val)
+```
+
+
+
+```{r}
+subset_cluster3<- kmeans(subset_3_scale,5,nstart=1)
+subset_cluster3$cluster
+#plot(subset_3_scale,col=subset_cluster1$cluster)
+#points(subset_cluster1$centers, pch=16)
+autoplot(subset_cluster3,data=subset_3_scale)
+table(subset_cluster3$cluster,survey_list$country_born) 
+
+##Checking for optimal K value
+Koptimal_val <- (length(subset_3_scale)-1)*sum(apply(subset_3_scale,2,var))
+for (i in 1:20) Koptimal_val[i] <- sum(kmeans(subset_3_scale,centers=i)$withinss)
+plot(1:20, Koptimal_val, type="b", xlab="Number of Clusters",
+  ylab="Dataset Value")
+
+##Validating the cluster using silhoutte width (the one clustered has no group because its a blank)
+#sil <- silhouette(subset_cluster3$cluster, dist(subset_3_scale))
+sil <- silhouette(subset_cluster3$cluster, dist(subset_3_scale))
+head(sil[, 1:3], 10)
+plot(sil, main ="Silhouette plot - K-means")
+fviz_silhouette(sil)
+
+# Summary of silhouette analysis
+sil.summary <- summary(sil)
+# Average silhouette width of each cluster
+sil.summary$clus.avg.widths
+# The total average (mean of all individual silhouette widths)
+sil.summary$avg.width
+# The size of each clusters
+sil.summary$clus.sizes
+```
+
+##Clustering the experience in statistics and currently using statistics in work to check with the experience with statistics
+```{r}
+#Creating subset
+subset_6<- survey_list[,c('amount_entertainment','amount_funreading','height','countries_livedin','age_independent')]
+
+subset_6$amount_funreading[is.na(subset_6$amount_funreading) ] <- 0
+subset_6$age_independent[is.na(subset_6$age_independent) ] <- 0
+subset_6$height[is.na(subset_6$height) ] <- 0
+#Conversting the dtatistician value from Yes and No to 1 and 0
+#subset_6$eye_colour <- unfactor(subset_6$eye_colour , levels=c("Brown","Blue","Black","Green","Hazel","Dark Brown"),
+#labels = c(1, 2, 3, 4, 4, 1))
+
+
+#subset_6$statistician <- ifelse(subset_6$statistician=='Y',1,0)
+#subset_6$statistician[is.na(subset_6$statistician) ] <- 0
+
+##Doing a scale
+max_val <-apply(subset_6,2,max)
+min_val <-apply(subset_6,2,min)
+subset_6_scale<- scale(subset_6, center=min_val, scale = max_val-min_val)
+```
+
+
+
+##Kmeans Clustering
+```{r}
+subset_cluster4<- kmeans(subset_6_scale,3,nstart=1)
+subset_cluster4$cluster
+#plot(subset_3_scale,col=subset_cluster1$cluster)
+#points(subset_cluster1$centers, pch=16)
+autoplot(subset_cluster4,data=subset_6_scale)
+table(subset_cluster4$cluster,survey_list$country_born) 
+
+##Checking for optimal K value
+Koptimal_val <- (length(subset_6_scale)-1)*sum(apply(subset_6_scale,2,var))
+for (i in 1:20) Koptimal_val[i] <- sum(kmeans(subset_6_scale,centers=i)$withinss)
+plot(1:20, Koptimal_val, type="b", xlab="Number of Clusters",
+  ylab="Dataset Value")
+
+##Validating the cluster using silhoutte width (the one clustered has no group because its a blank)
+#sil <- silhouette(subset_cluster3$cluster, dist(subset_3_scale))
+sil <- silhouette(subset_cluster4$cluster, dist(subset_6_scale))
+head(sil[, 1:3], 10)
+plot(sil, main ="Silhouette plot - K-means")
+fviz_silhouette(sil)
+
+# Summary of silhouette analysis
+sil.summary <- summary(sil)
+# Average silhouette width of each cluster
+sil.summary$clus.avg.widths
+# The total average (mean of all individual silhouette widths)
+sil.summary$avg.width
+# The size of each clusters
+sil.summary$clus.sizes
+```
+##Density estimation for Income and Height 
+##Smoothing by finding the alpha value
+```{r}
+
+ggplot(survey_list, aes(x=income)) + 
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+ geom_density(alpha=.2, col="")
+
+ggplot(survey_list, aes(x=height,y=..density..)) + 
+ geom_histogram(colour="black", fill="grey",bin=20) +
+ geom_density(aes(col="6.3"),bw=6.3,alpha=.2) +
+ geom_density(aes(col="2"),bw=2.0,alpha=.2) +
+ xlab("Height")+
+ ylab("") 
+ scale_color_manual(name="bandwidth", values=c("red","blue"))
+```
